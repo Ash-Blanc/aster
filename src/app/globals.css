@@ -1,26 +1,70 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* Candlelight on charcoal — one accent, whisper register */
+  --color-ink: oklch(0.16 0.008 80);
+  --color-ink-raised: oklch(0.21 0.01 80);
+  --color-ink-line: oklch(0.3 0.012 80);
+  --color-mist: oklch(0.78 0.008 80);
+  --color-mist-dim: oklch(0.6 0.008 80);
+  --color-bloom: oklch(0.82 0.12 75);
+  --color-bloom-deep: oklch(0.68 0.13 65);
+
+  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-sans: ui-sans-serif, system-ui, sans-serif;
+
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-ink);
+  color: var(--color-mist);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-bloom);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* 3-beat entrance */
+@keyframes beat-in {
+  0% { opacity: 0; transform: scale(0.95) translateY(8px); }
+  60% { opacity: 0.85; transform: scale(1.015) translateY(-2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.beat-in {
+  animation: beat-in 0.45s var(--ease-settle) both;
+}
+
+@keyframes agent-glow {
+  0%, 100% { box-shadow: 0 0 0 1px oklch(0.82 0.12 75 / 0.35), 0 0 24px oklch(0.82 0.12 75 / 0.12); }
+  50% { box-shadow: 0 0 0 1px oklch(0.82 0.12 75 / 0.6), 0 0 36px oklch(0.82 0.12 75 / 0.22); }
+}
+
+.agent-live {
+  animation: agent-glow 2.4s ease-in-out infinite;
+}
+
+@keyframes bloom-flood {
+  0% { opacity: 0; transform: scale(0.6); }
+  35% { opacity: 1; }
+  100% { opacity: 0; transform: scale(2.4); }
+}
+
+.bloom-flood {
+  animation: bloom-flood 0.9s var(--ease-settle) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .beat-in, .agent-live, .bloom-flood {
+    animation: none;
+  }
 }
