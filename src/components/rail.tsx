@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useStore, useDaysLeft } from "@/lib/store";
 import type { Station, StationStatus } from "@/lib/types";
 import { StationDetail } from "./station-detail";
+import { DeadlineRing } from "./deadline-ring";
 
 const statusCopy: Record<StationStatus, string> = {
   planned: "Planned",
@@ -23,10 +24,12 @@ function StationCard({
   station,
   index,
   onOpen,
+  focused,
 }: {
   station: Station;
   index: number;
   onOpen: (id: string) => void;
+  focused: boolean;
 }) {
   const { submitStation, activity, setActivity } = useStore();
   const days = useDaysLeft(station.due);
@@ -46,13 +49,14 @@ function StationCard({
     <article
       aria-label={station.name}
       style={{ animationDelay: `${index * 40}ms` }}
-      className={`beat-in relative flex w-72 shrink-0 flex-col gap-4 rounded-md border p-6 ${
+      data-station-id={station.id}
+      className={`beat-in relative flex w-72 shrink-0 flex-col gap-4 rounded-md border p-6 outline-none transition-shadow ${
         agentHere
           ? "agent-live border-bloom-deep"
           : soon
             ? "border-bloom/40"
             : "border-ink-line bg-ink-raised"
-      }`}
+      } ${focused ? "ring-1 ring-bloom/60 ring-offset-2 ring-offset-ink" : ""}`}
     >
       {blooming && (
         <span
@@ -93,13 +97,22 @@ function StationCard({
         )}
       </p>
 
-      <p className={`text-sm ${soon ? "text-bloom" : "text-mist-dim"}`} aria-live="polite">
-        {station.status === "submitted"
-          ? "Done. Nothing left to do."
-          : days === null
-            ? "Checking the calendar…"
-            : `Due in ${days} day${days === 1 ? "" : "s"}`}
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <DeadlineRing
+          due={station.due}
+          dim={station.status === "submitted"}
+        />
+        <p
+          className={`text-right text-sm ${soon ? "text-bloom" : "text-mist-dim"}`}
+          aria-live="polite"
+        >
+          {station.status === "submitted"
+            ? "Done. Nothing left to do."
+            : days === null
+              ? "Checking the calendar…"
+              : `Due in ${days} day${days === 1 ? "" : "s"}`}
+        </p>
+      </div>
 
       {open ? (
         <div className="pointer-events-none flex flex-1 flex-col gap-2">
@@ -237,9 +250,92 @@ function NextLine() {
   );
 }
 
+function bucket(
+  station: Station,
+  f: ReturnType<typeof useStore>["filter"],
+  nowMs: number
+): boolean {
+  if (f === "submitted") return station.status === "submitted";
+  if (station.status === "submitted") return false;
+  if (!nowMs) return f === "later";
+  const days = Math.ceil(
+    (new Date(station.due + "T23:59:59").getTime() - nowMs) / 86400000
+  );
+  if (f === "this-week") return days >= 0 && days <= 7;
+  if (f === "this-month") return days >= 0 && days <= 30;
+  if (f === "later") return days > 30;
+  return true;
+}
+
 export function Rail() {
-  const { stations, loaded, activity } = useStore();
+  const { stations, loaded, activity, filter, focusedStationId, advanceStation, setFocusedStation } = useStore();
   const [openId, setOpenId] = useState<string | null>(null);
+  // Read "now" from a local state that mirrors StoreProvider — keeps SSR safe.
+  const [nowMs, setNowMs] = useState<number>(0);
+  useEffect(() => {
+    setNowMs(Date.now());
+  }, []);
+
+  const visible = useMemo(
+    () => stations.filter((s) => bucket(s, filter, nowMs)),
+    [stations, filter, nowMs]
+  );
+
+  // Keyboard navigation:
+  //   j / ArrowRight → next visible station
+  //   k / ArrowLeft  → previous visible station
+  //   Enter / Space  → open focused station
+  //   L              → advance focused station's status
+  //   1-5            → set filter (this-week, this-month, later, all, submitted)
+  useEffect(() => {
+    function handler(e: KeyboardEvent) {
+      // Ignore when user is typing
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (openId) return; // modal open — details panel handles its own keys
+
+      if (visible.length === 0) return;
+
+      if (e.key === "j" || e.key === "ArrowRight") {
+        e.preventDefault();
+        const idx = visible.findIndex((s) => s.id === focusedStationId);
+        const nextIdx = idx < 0 ? 0 : Math.min(idx + 1, visible.length - 1);
+        setFocusedStation(visible[nextIdx].id);
+      } else if (e.key === "k" || e.key === "ArrowLeft") {
+        e.preventDefault();
+        const idx = visible.findIndex((s) => s.id === focusedStationId);
+        const prevIdx = idx < 0 ? 0 : Math.max(idx - 1, 0);
+        setFocusedStation(visible[prevIdx].id);
+      } else if (e.key === "Enter" || e.key === " ") {
+        if (focusedStationId) {
+          e.preventDefault();
+          setOpenId(focusedStationId);
+        }
+      } else if (e.key === "l" || e.key === "L") {
+        if (focusedStationId) {
+          e.preventDefault();
+          advanceStation(focusedStationId);
+        }
+      }
+    }
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [visible, focusedStationId, openId, advanceStation, setFocusedStation]);
+
+  // Scroll focused station into view when it changes via keys.
+  useEffect(() => {
+    if (!focusedStationId) return;
+    const el = document.querySelector(
+      `[data-station-id="${CSS.escape(focusedStationId)}"]`
+    );
+    if (el && "scrollIntoView" in el) {
+      (el as HTMLElement).scrollIntoView({
+        behavior: "smooth",
+        inline: "center",
+        block: "nearest",
+      });
+    }
+  }, [focusedStationId]);
 
   return (
     <section aria-label="Application rail" className="flex-1 overflow-x-auto px-6 py-9">
@@ -254,12 +350,21 @@ export function Rail() {
                 className="h-64 w-72 shrink-0 animate-pulse rounded-md border border-ink-line bg-ink-raised/50"
               />
             ))
-          : stations.map((s, i) => (
-              <StationCard key={s.id} station={s} index={i} onOpen={setOpenId} />
+          : visible.map((s, i) => (
+              <StationCard
+                key={s.id}
+                station={s}
+                index={i}
+                onOpen={(id) => {
+                  setOpenId(id);
+                  setFocusedStation(id);
+                }}
+                focused={focusedStationId === s.id}
+              />
             ))}
-        {loaded && stations.length === 0 && (
+        {loaded && visible.length === 0 && (
           <p className="text-mist-dim">
-            Nothing on the rail yet. Add a station with the + button, or ask Aster to add one.
+            Nothing matches this filter yet — try another bucket.
           </p>
         )}
         {loaded && <AddStation onAdded={() => undefined} />}

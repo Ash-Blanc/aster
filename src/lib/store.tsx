@@ -131,11 +131,23 @@ const seedAnswers: Answer[] = [
 
 type AppState = { stations: Station[]; answers: Answer[] };
 
+export type Filter = "this-week" | "this-month" | "later" | "all" | "submitted";
+
 type Store = {
   stations: Station[];
   answers: Answer[];
   activity: AgentActivity;
   loaded: boolean;
+  filter: Filter;
+  focusedStationId: string | null;
+  counts: {
+    total: number;
+    open: number;
+    submitted: number;
+    openThisWeek: number;
+    openThisMonth: number;
+    withOutline: number;
+  };
   submitStation: (id: string) => void;
   addOutline: (stationId: string, promptId: string, outline: Outline[]) => void;
   setActivity: (a: AgentActivity) => void;
@@ -148,6 +160,9 @@ type Store = {
   updateAnswer: (id: string, title: string, text: string) => void;
   deleteAnswer: (id: string) => void;
   attachAnswerToPrompt: (stationId: string, promptId: string, answerId: string) => void;
+  setFilter: (f: Filter) => void;
+  setFocusedStation: (id: string | null) => void;
+  advanceStation: (id: string) => void;
   resetDemo: () => void;
 };
 
@@ -176,11 +191,25 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AppState>({ stations: seed, answers: seedAnswers });
   const [loaded, setLoaded] = useState(false);
   const [activity, setActivity] = useState<AgentActivity>({ phase: "idle", label: "Aster is resting" });
+  const [filter, setFilter] = useState<Filter>("all");
+  const [focusedStationId, setFocusedStation] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const FILTER_KEY = `${STORAGE_KEY}:filter`;
+  const FOCUS_KEY = `${STORAGE_KEY}:focus`;
 
   useEffect(() => {
     setState(loadState());
     setLoaded(true);
+    if (typeof window !== "undefined") {
+      try {
+        const rawF = window.localStorage.getItem(FILTER_KEY);
+        if (rawF) setFilter(rawF as Filter);
+        const rawFocus = window.localStorage.getItem(FOCUS_KEY);
+        if (rawFocus) setFocusedStation(rawFocus);
+      } catch {
+        // localStorage blocked — fall through to defaults.
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -189,11 +218,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     saveTimer.current = setTimeout(() => {
       try {
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        window.localStorage.setItem(FILTER_KEY, filter);
+        window.localStorage.setItem(FOCUS_KEY, focusedStationId ?? "");
       } catch {
         // Storage full or blocked — the session still works in memory.
       }
     }, 300);
-  }, [state, loaded]);
+  }, [state, loaded, filter, focusedStationId]);
 
   const patchStation = useCallback((id: string, fn: (s: Station) => Station) => {
     setState((prev) => ({
@@ -214,6 +245,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const submitStation = useCallback(
     (id: string) => patchStation(id, (s) => ({ ...s, status: "submitted" })),
+    [patchStation]
+  );
+
+  const advanceStation = useCallback(
+    (id: string) =>
+      patchStation(id, (s) => {
+        if (s.status === "submitted") return s;
+        const order: Station["status"][] = ["planned", "drafting", "review", "submitted"];
+        const idx = order.indexOf(s.status);
+        return { ...s, status: order[Math.min(idx + 1, order.length - 1)] };
+      }),
     [patchStation]
   );
 
@@ -303,7 +345,56 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const resetDemo = useCallback(() => {
     setState({ stations: seed, answers: seedAnswers });
+    setFilter("all");
+    setFocusedStation(null);
   }, []);
+
+  // Pre-compute counts so multiple consumers (filter strip, footer, header) stay O(n).
+  // Date.now is captured on the client only via the "now" state, set after first render
+  // — required so server prerender doesn't call `new Date()` synchronously.
+  const [now, setNow] = useState<number>(0);
+  useEffect(() => {
+    setNow(Date.now());
+  }, []);
+  const counts = useMemo(() => {
+    if (!now) {
+      // First render — return zeros to avoid server/client markup drift.
+      return {
+        total: state.stations.length,
+        open: state.stations.length,
+        submitted: 0,
+        openThisWeek: 0,
+        openThisMonth: 0,
+        withOutline: 0,
+      };
+    }
+    let open = 0;
+    let submitted = 0;
+    let openThisWeek = 0;
+    let openThisMonth = 0;
+    let withOutline = 0;
+    for (const s of state.stations) {
+      if (s.status === "submitted") {
+        submitted += 1;
+      } else {
+        open += 1;
+        const days = Math.ceil(
+          (new Date(s.due + "T23:59:59").getTime() - now) / 86400000
+        );
+        if (days >= 0 && days <= 7) openThisWeek += 1;
+        if (days >= 0 && days <= 30) openThisMonth += 1;
+        if (s.prompts.some((p) => (p.outline?.length ?? 0) > 0)) withOutline += 1;
+      }
+    }
+    return {
+      total: state.stations.length,
+      open,
+      submitted,
+      openThisWeek,
+      openThisMonth,
+      withOutline,
+    };
+  }, [state.stations, now]);
 
   const value = useMemo<Store>(
     () => ({
@@ -311,6 +402,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       answers: state.answers,
       activity,
       loaded,
+      filter,
+      focusedStationId,
+      counts,
       submitStation,
       addOutline,
       setActivity,
@@ -323,12 +417,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       updateAnswer,
       deleteAnswer,
       attachAnswerToPrompt,
+      setFilter,
+      setFocusedStation,
+      advanceStation,
       resetDemo,
     }),
     [
       state,
       activity,
       loaded,
+      filter,
+      focusedStationId,
+      counts,
       submitStation,
       addOutline,
       addStation,
@@ -340,6 +440,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       updateAnswer,
       deleteAnswer,
       attachAnswerToPrompt,
+      advanceStation,
       resetDemo,
     ]
   );

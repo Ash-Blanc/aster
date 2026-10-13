@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Rail } from "@/components/rail";
 import { AsterAgent } from "@/components/agent";
-import { useStore, useDaysLeft } from "@/lib/store";
+import { FilterStrip } from "@/components/filter-strip";
+import { SubmittedGallery } from "@/components/submitted-gallery";
+import { useStore } from "@/lib/store";
 
 const phaseCopy: Record<string, string> = {
   idle: "Resting",
@@ -15,21 +17,41 @@ const phaseCopy: Record<string, string> = {
 const AGENT_ON = process.env.NEXT_PUBLIC_ASTER_AGENT === "on";
 
 function Footer() {
-  const { stations, resetDemo } = useStore();
-  const openStations = stations.filter((s) => s.status !== "submitted");
-  const nextDue = openStations.map((s) => s.due).sort()[0];
-  const days = useDaysLeft(nextDue ?? "1970-01-01");
-
+  const { counts, resetDemo } = useStore();
   return (
-    <footer className="flex items-center justify-between gap-4 border-t border-ink-line px-6 py-3 text-xs text-mist-dim">
+    <footer className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-ink-line px-6 py-3 text-xs text-mist-dim">
       <p>
-        {stations.length} stations · {stations.filter((s) => s.status === "submitted").length}{" "}
-        submitted
-        {openStations.length > 0 && days !== null
-          ? ` · next deadline in ${days} day${days === 1 ? "" : "s"}`
-          : " · all clear"}
+        <span className="text-mist">{counts.open}</span> open ·{" "}
+        <span className="text-mist">{counts.withOutline}</span> outlined ·{" "}
+        <span className="text-mist">{counts.submitted}</span> submitted
+        {counts.openThisWeek > 0 ? (
+          <>
+            {" "}· <span className="text-bloom">{counts.openThisWeek}</span>{" "}
+            this week
+          </>
+        ) : null}
       </p>
-      <button onClick={resetDemo} className="min-h-11 px-2 underline underline-offset-4 hover:text-bloom">
+      <p className="text-[11px] text-mist-dim/80">
+        <kbd className="rounded border border-ink-line px-1.5 font-mono text-[10px]">J</kbd>
+        {" "}/{" "}
+        <kbd className="rounded border border-ink-line px-1.5 font-mono text-[10px]">K</kbd>
+        {" "}to move ·{" "}
+        <kbd className="rounded border border-ink-line px-1.5 font-mono text-[10px]">Enter</kbd>
+        {" "}to open ·{" "}
+        <kbd className="rounded border border-ink-line px-1.5 font-mono text-[10px]">L</kbd>
+        {" "}to advance
+      </p>
+      <button
+        onClick={() => {
+          if (
+            typeof window !== "undefined" &&
+            window.confirm("Reset to the seed stations and answers?")
+          ) {
+            resetDemo();
+          }
+        }}
+        className="min-h-11 px-2 underline underline-offset-4 hover:text-bloom"
+      >
         Reset demo
       </button>
     </footer>
@@ -62,7 +84,7 @@ export default function Home() {
           <span
             aria-hidden
             className={`inline-block size-2 rounded-full ${
-              activity.phase === "awaiting" ? "bg-bloom" : "bg-ink-line"
+              activity.phase === "awaiting" ? "bg-bloom agent-wait-pulse" : "bg-ink-line"
             }`}
           />
           {statusLabel}
@@ -77,7 +99,20 @@ export default function Home() {
       )}
 
       <div className="flex flex-1 flex-col">
+        <div className="px-6 pt-9">
+          <Suspense
+            fallback={
+              <div className="h-9 w-full animate-pulse rounded-md bg-ink-raised/60" aria-hidden />
+            }
+          >
+            <FilterStrip />
+          </Suspense>
+        </div>
         <Rail />
+      </div>
+
+      <div className="px-6 pb-9">
+        <SubmittedGallery />
       </div>
 
       <Footer />

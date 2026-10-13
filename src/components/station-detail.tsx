@@ -94,11 +94,33 @@ export function StationDetail({ stationId, onClose }: { stationId: string; onClo
               No prompts yet. Ask Aster to pull them, or attach one when the portal opens.
             </p>
           )}
-          {station.prompts.map((p) => (
-            <article key={p.id} className="flex flex-col gap-2 rounded-md border border-ink-line bg-ink-raised p-4">
+          {station.prompts.map((p) => {
+            const beatCount = p.outline?.length ?? 0;
+            const notesLen = (p.notes ?? "").trim().length;
+            const ready = beatCount >= 3 && notesLen > 0;
+            return (
+            <article key={p.id} className="flex flex-col gap-3 rounded-md border border-ink-line bg-ink-raised p-4">
+              {/* Per-prompt checklist: prompt → outline → notes → ready */}
+              <ul
+                role="list"
+                aria-label="Prompt readiness"
+                className="flex flex-wrap gap-2 text-[10px] uppercase tracking-widest"
+              >
+                <li className={`flex items-center gap-1 rounded-full border px-2 py-0.5 ${beatCount > 0 ? "border-bloom/40 text-bloom" : "border-ink-line text-mist-dim"}`}>
+                  <span aria-hidden>{beatCount > 0 ? "●" : "○"}</span> outline ({beatCount})
+                </li>
+                <li className={`flex items-center gap-1 rounded-full border px-2 py-0.5 ${notesLen > 0 ? "border-bloom/40 text-bloom" : "border-ink-line text-mist-dim"}`}>
+                  <span aria-hidden>{notesLen > 0 ? "●" : "○"}</span> notes ({notesLen})
+                </li>
+                <li className={`flex items-center gap-1 rounded-full border px-2 py-0.5 ${ready ? "border-bloom-deep bg-bloom/10 text-bloom-deep" : "border-ink-line text-mist-dim"}`}>
+                  <span aria-hidden>{ready ? "✓" : "…"}</span> {ready ? "ready to write" : "drafting"}
+                </li>
+              </ul>
+
               <p className="font-display text-lg italic text-mist">“{p.text}”</p>
               <p className="text-xs text-mist-dim">
-                {p.words} words · {p.outline?.length ?? 0} beats outlined
+                {p.words} words · {beatCount} beats outlined
+                {ready ? " · outline + notes ready" : ""}
               </p>
 
               {p.outline && p.outline.length > 0 && (
@@ -156,7 +178,8 @@ export function StationDetail({ stationId, onClose }: { stationId: string; onClo
                 </select>
               </div>
             </article>
-          ))}
+            );
+          })}
         </section>
 
         <section className="flex flex-col gap-3">
