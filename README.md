@@ -28,9 +28,19 @@ Four actions, every one human-in-the-loop via `renderAndWait` — the proposal r
 
 The agent sees the full rail state through `useCopilotReadable` — it picks real station/prompt ids and answers "what's due next" from actual data.
 
+## The control surface (what a judge sees in 30 seconds)
+
+- **One accent, two motions.** Candlelight amber appears *only* on what's alive: a deadline in the next two weeks, the prompt that's "ready to write", the agent's pending proposal. Bloom-flood plays on submit, then the station leaves the rail and lands in a permanent "Submitted" gallery below — so what got done is honoured, not hidden.
+- **Deadline ring.** Each station card carries a small ring whose fill grows as the deadline approaches (30-day horizon, never panics). Submit it and the ring fades — closure, not noise.
+- **Filter strip.** *This week / This month / Later / All open / Submitted* — five pills above the rail, each with a count. The "this week" chip quietly shows itself as a suggestion when something is overdue or close.
+- **Per-prompt readiness.** Inside the detail panel every prompt carries three pills: *outline (n beats) · notes (chars) · ready to write*. The third pill flips on when both outline ≥ 3 and notes exist — that's the moment the student opens their document.
+- **Keyboard nav.** `J` / `K` move focus along the visible rail; `Enter` opens; `L` advances status (planned → drafting → review → submitted). Every shortcut is mirrored in the footer. Inputs and the detail panel claim the keyspace for themselves.
+- **Progress meter in the footer.** *N open · X outlined · Y submitted · Z this week* — one line, the live truth of the workspace.
+- **Agent presence.** A soft pulse on the header dot when the agent is "waiting on you" — visible from across the room, calmer than a notification.
+
 ## Persistence
 
-State lives in `localStorage` (`aster:state:v1`) — add a station, commit an outline, reload, it's all still there. "Reset demo" in the footer restores the seed.
+State lives in `localStorage` (`aster:state:v1`) — add a station, commit an outline, reload, it's all still there. Filter selection and focused station also persist (`aster:state:v1:filter`, `aster:state:v1:focus`). "Reset demo" in the footer restores the seed.
 
 ## Stack
 
