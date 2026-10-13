@@ -63,8 +63,18 @@ body {
   animation: bloom-flood 0.9s var(--ease-settle) both;
 }
 
+/* Soft pulse for the agent-awaiting dot — never loud, never in flight */
+@keyframes agent-wait-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 oklch(0.82 0.12 75 / 0.45); }
+  50% { opacity: 0.6; box-shadow: 0 0 0 6px oklch(0.82 0.12 75 / 0); }
+}
+
+.agent-wait-pulse {
+  animation: agent-wait-pulse 1.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .beat-in, .agent-live, .bloom-flood {
+  .beat-in, .agent-live, .bloom-flood, .agent-wait-pulse {
     animation: none;
   }
 }
